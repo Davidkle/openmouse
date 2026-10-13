@@ -1,0 +1,127 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Unit tests
+        run: scripts/test.sh
+      - name: Build (unsigned)
+        run: CODESIGN_IDENTITY= scripts/build-app.sh
+
+  release:
+    # Every push to main produces a signed, notarized download.
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 60
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check release credentials
+        id: creds
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in CERTIFICATE CERTIFICATE_PASSWORD NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning title=Release skipped::Missing secrets:$missing. Add them (see README) and re-run this workflow to publish a release."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Assign version
+        if: steps.creds.outputs.ready == 'true'
+        run: echo "VERSION=0.1.${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - name: Prepare ephemeral signing keychain
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          KEYCHAIN="$RUNNER_TEMP/openmouse-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | grep '"Developer ID Application' | head -1 | sed -E 's/.*"(.*)"/\1/')
+          if [ -z "$IDENTITY" ]; then echo "No Developer ID Application identity in certificate" >&2; exit 1; fi
+          echo "CODESIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "NOTARY_KEY_FILE=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
+
+      - name: Build and sign universal app
+        if: steps.creds.outputs.ready == 'true'
+        run: UNIVERSAL=1 scripts/build-app.sh
+
+      - name: Notarize, staple and package
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: scripts/package-release.sh
+
+      - name: Keep build artifacts
+        if: steps.creds.outputs.ready == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenMouse-${{ env.VERSION }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            build/OpenMouse-*.dmg
+            build/OpenMouse-*.zip
+            build/*.sha256
+
+      - name: Publish GitHub release
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf 'Universal macOS build (Apple Silicon + Intel). Developer ID signed, notarized by Apple, and stapled.\n\nDownload the DMG, drag OpenMouse into Applications, then grant Accessibility access when asked. Quit Logi Options+ first.\n\nSource: %s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
+          gh release create "v$VERSION" build/OpenMouse-$VERSION.dmg build/OpenMouse-$VERSION.dmg.sha256 \
+            build/OpenMouse-$VERSION.zip build/OpenMouse-$VERSION.zip.sha256 \
+            --target "$GITHUB_SHA" --title "OpenMouse $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/openmouse-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/notary.p8"

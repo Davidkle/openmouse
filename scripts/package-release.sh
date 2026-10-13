@@ -32,11 +32,23 @@ notarize() {
   fi
 }
 
+# Fetching the ticket from Apple's CDN sometimes drops the connection, and a
+# freshly issued ticket can take a moment to propagate, so retry.
+staple() {
+  [ "$SKIP_NOTARIZE" = "1" ] && return 0
+  for attempt in 1 2 3 4 5; do
+    xcrun stapler staple "$1" && return 0
+    echo "Stapling $1 failed (attempt $attempt), retrying in $((attempt * 10))s" >&2
+    sleep $((attempt * 10))
+  done
+  return 1
+}
+
 # 1. Notarize the app itself and staple it, so the ZIP works offline too.
 rm -f build/OpenMouse-notarize.zip
 ditto -c -k --keepParent "$APP" build/OpenMouse-notarize.zip
 notarize build/OpenMouse-notarize.zip
-[ "$SKIP_NOTARIZE" = "1" ] || xcrun stapler staple "$APP"
+staple "$APP"
 rm -f build/OpenMouse-notarize.zip
 
 rm -f "$ZIP"
@@ -53,7 +65,7 @@ if [ -n "$CODESIGN_IDENTITY" ]; then
   codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$DMG"
 fi
 notarize "$DMG"
-[ "$SKIP_NOTARIZE" = "1" ] || xcrun stapler staple "$DMG"
+staple "$DMG"
 
 (cd build && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256" && shasum -a 256 "$(basename "$ZIP")" > "$(basename "$ZIP").sha256")
 [ "$SKIP_NOTARIZE" = "1" ] || spctl --assess --type execute --verbose "$APP"

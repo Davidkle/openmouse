@@ -14,7 +14,6 @@ It talks to Logitech mice directly over HID++ (via Bolt or Unifying receivers, B
 - **DPI**: a slider plus presets you can cycle through with a button.
 - **Per-app profiles**: override any button while a specific app is in front.
 - **Actions**: keyboard shortcuts (recorded), copy and paste, browser back and forward, tabs, zoom, Mission Control, App Exposé, Spaces, Show Desktop, Launchpad/Apps, screenshots, lock, sleep, media and volume keys, brightness, mouse buttons, scrolling, opening apps or URLs, typing text, shell commands and AppleScript.
-- A menu bar item with battery level and a pause switch.
 - **Runs in the background**: a launchd agent starts OpenMouse at login with no window or Dock icon, so remapping works without the app open.
 
 ## Download

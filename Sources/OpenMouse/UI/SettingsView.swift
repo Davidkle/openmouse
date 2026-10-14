@@ -66,7 +66,6 @@ struct SettingsView: View {
                     }
                     .foregroundStyle(.orange)
                 }
-                Toggle("Show in menu bar", isOn: $store.config.general.showMenuBarIcon)
                 Toggle(isOn: $store.config.general.onlyLogitechDevices) {
                     Text("Only remap Logitech mice")
                     Text("When off, button and scroll settings also apply to other mice. Trackpads are never affected.")
@@ -188,35 +187,5 @@ private struct DeviceDiagnostics: View {
             Text(value)
         }
         .font(.caption)
-    }
-}
-
-struct MenuBarContent: View {
-    @Environment(ConfigStore.self) private var store
-    @Environment(RemapEngine.self) private var engine
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        @Bindable var store = store
-        ForEach(engine.devices.pointerDevices) { device in
-            if let percent = device.battery?.percent {
-                Text("\(device.name) — \(percent)%\(device.battery?.state == .charging ? " ⚡︎" : "")")
-            } else {
-                Text(device.name)
-            }
-        }
-        if engine.devices.pointerDevices.isEmpty {
-            Text("No mouse connected")
-        }
-        Divider()
-        Toggle("Pause Remapping", isOn: $store.config.general.paused)
-        Divider()
-        Button("Open OpenMouse…") {
-            openWindow(id: "main")
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        .keyboardShortcut(",")
-        Button("Quit OpenMouse") { NSApp.terminate(nil) }
-            .keyboardShortcut("q")
     }
 }

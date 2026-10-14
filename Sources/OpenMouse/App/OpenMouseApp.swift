@@ -59,8 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// A titled document-style window, as opposed to the menu bar extra's
-    /// status item and menus.
+    /// A titled document-style window, as opposed to menus and panels.
     private static func isAppWindow(_ window: NSWindow) -> Bool {
         window.styleMask.contains(.titled) && !(window is NSPanel)
     }
@@ -100,29 +99,5 @@ struct OpenMouseApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
-
-        // One-way: AppKit writes the status item's visibility back through this
-        // binding whenever the scene updates, and storing that write would
-        // invalidate this body again and spin the main thread forever. The
-        // Settings toggle is the only thing that changes the preference.
-        MenuBarExtra(isInserted: Binding(
-            get: { delegate.store.config.general.showMenuBarIcon },
-            set: { _ in }
-        )) {
-            MenuBarContent()
-                .environment(delegate.store)
-                .environment(delegate.engine)
-        } label: {
-            MenuBarLabel(store: delegate.store)
-        }
-    }
-}
-
-/// Its own view so pausing only redraws the icon, not every scene.
-private struct MenuBarLabel: View {
-    let store: ConfigStore
-
-    var body: some View {
-        Image(systemName: store.config.general.paused ? "computermouse" : "computermouse.fill")
     }
 }

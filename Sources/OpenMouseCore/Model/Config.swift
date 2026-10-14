@@ -93,7 +93,6 @@ public struct DeviceSettings: Codable, Hashable, Sendable {
 public struct GeneralSettings: Codable, Hashable, Sendable {
     /// Only intercept buttons and scrolling from Logitech devices.
     public var onlyLogitechDevices = true
-    public var showMenuBarIcon = true
     public var paused = false
 
     public init() {}
@@ -102,7 +101,6 @@ public struct GeneralSettings: Codable, Hashable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = GeneralSettings()
         onlyLogitechDevices = try c.decodeIfPresent(Bool.self, forKey: .onlyLogitechDevices) ?? d.onlyLogitechDevices
-        showMenuBarIcon = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? d.showMenuBarIcon
         paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? d.paused
     }
 }

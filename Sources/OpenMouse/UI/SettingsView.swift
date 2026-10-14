@@ -6,8 +6,8 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(ConfigStore.self) private var store
     @Environment(RemapEngine.self) private var engine
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
-    @State private var loginError: String?
+    @State private var agentStatus = BackgroundAgent.status
+    @State private var agentError: String?
     @State private var optionsPlusRunning = false
     @State private var confirmReset = false
 
@@ -55,9 +55,16 @@ struct SettingsView: View {
             }
 
             Section("General") {
-                Toggle(isOn: Binding(get: { launchAtLogin }, set: setLaunchAtLogin)) {
-                    Text("Open at login")
-                    if let loginError { Text(loginError).foregroundStyle(.red) }
+                Toggle(isOn: Binding(get: { agentStatus != .notRegistered && agentStatus != .notFound }, set: setRunInBackground)) {
+                    Text("Run in background")
+                    Text("Starts at login and keeps remapping with this window closed. Quitting OpenMouse stops remapping until you open it again or log in.")
+                    if let agentError { Text(agentError).foregroundStyle(.red) }
+                }
+                if agentStatus == .requiresApproval {
+                    LabeledContent("Background item is turned off in System Settings") {
+                        Button("Open Login Items…") { SMAppService.openSystemSettingsLoginItems() }
+                    }
+                    .foregroundStyle(.orange)
                 }
                 Toggle("Show in menu bar", isOn: $store.config.general.showMenuBarIcon)
                 Toggle(isOn: $store.config.general.onlyLogitechDevices) {
@@ -114,6 +121,10 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .task { optionsPlusRunning = await Self.isOptionsPlusRunning() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // The user may have flipped it in System Settings → Login Items.
+            agentStatus = BackgroundAgent.status
+        }
         .confirmationDialog("Reset all OpenMouse settings?", isPresented: $confirmReset) {
             Button("Reset", role: .destructive) { store.config = Config() }
         } message: {
@@ -121,14 +132,16 @@ struct SettingsView: View {
         }
     }
 
-    private func setLaunchAtLogin(_ enabled: Bool) {
-        do {
-            if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            loginError = nil
-        } catch {
-            loginError = error.localizedDescription
+    private func setRunInBackground(_ enabled: Bool) {
+        Task {
+            do {
+                try await BackgroundAgent.setEnabled(enabled)
+                agentError = nil
+            } catch {
+                agentError = error.localizedDescription
+            }
+            agentStatus = BackgroundAgent.status
         }
-        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
     static func isOptionsPlusRunning() async -> Bool {

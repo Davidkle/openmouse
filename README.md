@@ -15,6 +15,7 @@ It talks to Logitech mice directly over HID++ (via Bolt or Unifying receivers, B
 - **Per-app profiles**: override any button while a specific app is in front.
 - **Actions**: keyboard shortcuts (recorded), copy and paste, browser back and forward, tabs, zoom, Mission Control, App Exposé, Spaces, Show Desktop, Launchpad/Apps, screenshots, lock, sleep, media and volume keys, brightness, mouse buttons, scrolling, opening apps or URLs, typing text, shell commands and AppleScript.
 - A menu bar item with battery level and a pause switch.
+- **Runs in the background**: a launchd agent starts OpenMouse at login with no window or Dock icon, so remapping works without the app open.
 
 ## Download
 
@@ -53,6 +54,8 @@ To release locally, run `scripts/build-app.sh` followed by `scripts/package-rele
 1. **Quit Logi Options+**, including its background agent (`logioptionsplus_agent`). Both apps configure the mouse over HID++ and will undo each other's changes. Uninstalling Options+ is the most reliable fix.
 2. Grant **Accessibility** access when prompted (System Settings → Privacy & Security → Accessibility). Without it, OpenMouse can't intercept buttons and scrolling.
 3. Click a control on the mouse diagram and pick an action.
+
+The first launch also turns on **Run in background** (Settings → General). macOS lists it under System Settings → General → Login Items & Extensions as an OpenMouse background item. From then on OpenMouse starts at login without a window, and launchd restarts it if it crashes. Opening OpenMouse shows the settings window of that same background process, and closing the window leaves it running. Choosing Quit stops remapping until you open OpenMouse again or log in.
 
 ## How it works
 

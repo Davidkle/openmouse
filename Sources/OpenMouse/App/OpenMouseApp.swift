@@ -14,12 +14,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        engine.start()
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        guard BackgroundAgent.claimSingleInstance() else { exit(0) }
+        // LSUIElement starts every launch as an accessory; a launch by the
+        // user gets a Dock icon right away.
+        if !BackgroundAgent.isAgentProcess { NSApp.setActivationPolicy(.regular) }
     }
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        engine.start()
+        BackgroundAgent.enableOnFirstLaunch()
+        observeWindows()
+        if BackgroundAgent.isAgentProcess {
+            // Started at login: keep remapping, but don't put a window up.
+            DispatchQueue.main.async {
+                for window in NSApp.windows where Self.isAppWindow(window) { window.close() }
+            }
+        }
+    }
+
+    /// Keeps running with no window: remapping lives in this process.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        !store.config.general.showMenuBarIcon
+        false
+    }
+
+    /// Show the Dock icon only while the settings window is open.
+    private func observeWindows() {
+        let center = NotificationCenter.default
+        center.addObserver(forName: NSWindow.didBecomeMainNotification, object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                guard let window = note.object as? NSWindow, Self.isAppWindow(window) else { return }
+                if NSApp.activationPolicy() != .regular {
+                    NSApp.setActivationPolicy(.regular)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
+        }
+        center.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                guard let closing = note.object as? NSWindow, Self.isAppWindow(closing) else { return }
+                let othersOpen = NSApp.windows.contains { $0 !== closing && $0.isVisible && Self.isAppWindow($0) }
+                if !othersOpen { NSApp.setActivationPolicy(.accessory) }
+            }
+        }
+    }
+
+    /// A titled document-style window, as opposed to the menu bar extra's
+    /// status item and menus.
+    private static func isAppWindow(_ window: NSWindow) -> Bool {
+        window.styleMask.contains(.titled) && !(window is NSPanel)
     }
 
     /// Hand every diverted control back to the firmware before quitting so

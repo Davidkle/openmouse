@@ -24,6 +24,9 @@
 	<string>__BUILD__</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
+	<!-- Starts as a background agent; the app shows a Dock icon while its window is open. -->
+	<key>LSUIElement</key>
+	<true/>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSAppleEventsUsageDescription</key>

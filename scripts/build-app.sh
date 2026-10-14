@@ -28,8 +28,9 @@ BIN=$(swift build -c release $ARCH_FLAGS --show-bin-path)/OpenMouse
 [ -f Resources/AppIcon.icns ] || swift scripts/make-icon.swift .
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/LaunchAgents"
 cp "$BIN" "$APP/Contents/MacOS/OpenMouse"
+cp Resources/dev.openmouse.OpenMouse.agent.plist "$APP/Contents/Library/LaunchAgents/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 cp THIRD_PARTY_NOTICES "$APP/Contents/Resources/"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" Resources/Info.plist > "$APP/Contents/Info.plist"

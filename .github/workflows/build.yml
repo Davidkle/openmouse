@@ -45,10 +45,11 @@ jobs:
           NOTARY_KEY: ${{ secrets.NOTARY_KEY_P8 }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
         run: |
           set -euo pipefail
           missing=""
-          for name in CERTIFICATE CERTIFICATE_PASSWORD NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+          for name in CERTIFICATE CERTIFICATE_PASSWORD NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID SPARKLE_PRIVATE_ED_KEY; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
           done
           if [ -n "$missing" ]; then
@@ -60,7 +61,10 @@ jobs:
 
       - name: Assign version
         if: steps.creds.outputs.ready == 'true'
-        run: echo "VERSION=0.1.${{ github.run_number }}" >> "$GITHUB_ENV"
+        # Sparkle compares BUILD (CFBundleVersion), so it must only ever grow.
+        run: |
+          echo "VERSION=0.1.${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
 
       - name: Prepare ephemeral signing keychain
         if: steps.creds.outputs.ready == 'true'
@@ -89,6 +93,9 @@ jobs:
 
       - name: Build and sign universal app
         if: steps.creds.outputs.ready == 'true'
+        env:
+          SPARKLE_FEED_URL: https://github.com/Davidkle/openmouse/releases/latest/download/appcast.xml
+          SPARKLE_PUBLIC_ED_KEY: ETBH6/AsGOkoxu60YBjQUVLGHpIo4Zr1n777Sx9VCxI=
         run: UNIVERSAL=1 scripts/build-app.sh
 
       - name: Notarize, staple and package
@@ -97,6 +104,44 @@ jobs:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
         run: scripts/package-release.sh
+
+      - name: Sign update and write appcast
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: |
+          set -euo pipefail
+          DMG="build/OpenMouse-$VERSION.dmg"
+          sign_update=$(find .build/artifacts/sparkle/Sparkle/bin -name sign_update -type f | head -1)
+          if [ -z "$sign_update" ]; then echo "Sparkle sign_update not found" >&2; exit 1; fi
+          signature=$(printf '%s' "$SPARKLE_PRIVATE_ED_KEY" | "$sign_update" --ed-key-file - -p "$DMG")
+          if [ -z "$signature" ]; then echo "Sparkle signature was empty" >&2; exit 1; fi
+          cat > build/appcast.xml <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>OpenMouse Updates</title>
+              <link>https://github.com/Davidkle/openmouse/releases/latest/download/appcast.xml</link>
+              <description>OpenMouse macOS app updates.</description>
+              <language>en</language>
+              <item>
+                <title>Version $VERSION</title>
+                <sparkle:releaseNotesLink>https://github.com/Davidkle/openmouse/releases/tag/v$VERSION</sparkle:releaseNotesLink>
+                <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S GMT')</pubDate>
+                <enclosure
+                  url="https://github.com/Davidkle/openmouse/releases/download/v$VERSION/OpenMouse-$VERSION.dmg"
+                  sparkle:version="$BUILD"
+                  sparkle:shortVersionString="$VERSION"
+                  sparkle:minimumSystemVersion="14.0"
+                  sparkle:edSignature="$signature"
+                  length="$(stat -f%z "$DMG")"
+                  type="application/x-apple-diskimage" />
+              </item>
+            </channel>
+          </rss>
+          EOF
+          xmllint --noout build/appcast.xml
+          cat build/appcast.xml
 
       - name: Keep build artifacts
         if: steps.creds.outputs.ready == 'true'
@@ -117,7 +162,7 @@ jobs:
         run: |
           printf 'Universal macOS build (Apple Silicon + Intel). Developer ID signed, notarized by Apple, and stapled.\n\nDownload the DMG, drag OpenMouse into Applications, then grant Accessibility access when asked. Quit Logi Options+ first.\n\nSource: %s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
           gh release create "v$VERSION" build/OpenMouse-$VERSION.dmg build/OpenMouse-$VERSION.dmg.sha256 \
-            build/OpenMouse-$VERSION.zip build/OpenMouse-$VERSION.zip.sha256 \
+            build/OpenMouse-$VERSION.zip build/OpenMouse-$VERSION.zip.sha256 build/appcast.xml \
             --target "$GITHUB_SHA" --title "OpenMouse $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest
 
       - name: Remove signing material

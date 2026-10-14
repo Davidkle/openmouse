@@ -6,6 +6,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(ConfigStore.self) private var store
     @Environment(RemapEngine.self) private var engine
+    @Environment(UpdateController.self) private var updates
     @State private var agentStatus = BackgroundAgent.status
     @State private var agentError: String?
     @State private var optionsPlusRunning = false
@@ -113,6 +114,7 @@ struct SettingsView: View {
 
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")
+                UpdateRow(updates: updates)
                 Text("A local, account-free replacement for Logitech Options+.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -187,5 +189,47 @@ private struct DeviceDiagnostics: View {
             Text(value)
         }
         .font(.caption)
+    }
+}
+
+/// One button that follows the update state, as in Donkey: "Check for
+/// Updates" at rest, progress while checking or installing, and "Update App"
+/// once an update is waiting.
+private struct UpdateRow: View {
+    let updates: UpdateController
+
+    var body: some View {
+        LabeledContent {
+            switch updates.status {
+            case .checking, .installing:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(updates.status == .checking ? "Checking for Updates…" : "Updating…")
+                }
+            case .available:
+                Button(updates.latestVersion.map { "Update App (\($0))" } ?? "Update App") {
+                    updates.installAvailableUpdate()
+                }
+                .buttonStyle(.borderedProminent)
+            case .requiresAdmin:
+                Text("Update Requires an Admin").foregroundStyle(.secondary)
+            default:
+                Button("Check for Updates") { updates.checkForUpdates() }
+                    .disabled(updates.status == .unavailable)
+            }
+        } label: {
+            Text("Updates")
+            if let note {
+                Text(note)
+            }
+        }
+    }
+
+    private var note: String? {
+        switch updates.status {
+        case .upToDate: return "OpenMouse \(updates.currentVersion) is the latest version."
+        case .failed, .unavailable: return updates.message
+        default: return nil
+        }
     }
 }

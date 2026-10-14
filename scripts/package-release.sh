@@ -62,7 +62,11 @@ rm -f "$DMG"
 hdiutil create -volname "OpenMouse" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 rm -rf "$STAGE"
 if [ -n "$CODESIGN_IDENTITY" ]; then
-  codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$DMG"
+  for attempt in 1 2 3; do
+    codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$DMG" && break
+    [ "$attempt" = 3 ] && exit 1
+    sleep $((attempt * 5))
+  done
 fi
 notarize "$DMG"
 staple "$DMG"

@@ -161,10 +161,12 @@ struct BatteryView: View {
 struct StatusFooter: View {
     @Environment(RemapEngine.self) private var engine
     @Environment(ConfigStore.self) private var store
+    @Environment(UpdateController.self) private var updates
 
     var body: some View {
         @Bindable var store = store
         VStack(alignment: .leading, spacing: 8) {
+            UpdateBanner(updates: updates)
             Toggle(isOn: Binding(get: { !store.config.general.paused }, set: { store.config.general.paused = !$0 })) {
                 Text("Remapping enabled")
             }
@@ -215,3 +217,34 @@ struct PermissionBanner: View {
     }
 }
 
+/// Shown above the footer only when there's something to do: an update is
+/// ready, is installing, or needs an administrator.
+private struct UpdateBanner: View {
+    let updates: UpdateController
+
+    var body: some View {
+        switch updates.status {
+        case .available:
+            Button {
+                updates.installAvailableUpdate()
+            } label: {
+                Label(updates.latestVersion.map { "Update App (\($0))" } ?? "Update App",
+                      systemImage: "arrow.down.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        case .installing:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Updating…").font(.callout)
+            }
+        case .requiresAdmin:
+            Label("Updating to \(updates.latestVersion ?? "the new version") requires an admin", systemImage: "lock")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        default:
+            EmptyView()
+        }
+    }
+}

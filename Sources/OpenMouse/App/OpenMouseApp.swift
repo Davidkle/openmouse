@@ -6,6 +6,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store: ConfigStore
     let engine: RemapEngine
+    let updates = UpdateController()
     private var shuttingDown = false
 
     override init() {
@@ -23,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         engine.start()
+        updates.start()
         BackgroundAgent.enableOnFirstLaunch()
         observeWindows()
         if BackgroundAgent.isAgentProcess {
@@ -92,6 +94,7 @@ struct OpenMouseApp: App {
             ContentView()
                 .environment(delegate.store)
                 .environment(delegate.engine)
+                .environment(delegate.updates)
                 .frame(minWidth: 960, minHeight: 620)
         }
         .defaultSize(width: 1060, height: 720)

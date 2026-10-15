@@ -206,3 +206,12 @@ import Testing
         #expect(plan == CapturePlan())
     }
 }
+
+@Suite struct PinchZoomTests {
+    @Test func onlyPinchActionsMagnify() {
+        #expect(StandardAction.pinchZoomIn.pinchDirection == 1)
+        #expect(StandardAction.pinchZoomOut.pinchDirection == -1)
+        #expect(StandardAction.zoomIn.pinchDirection == nil)
+        #expect(StandardAction.pinchZoomIn.shortcut == nil)
+    }
+}

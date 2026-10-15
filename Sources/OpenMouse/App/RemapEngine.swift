@@ -225,6 +225,12 @@ final class RemapEngine: LogiDeviceDelegate {
         let resolution = Double(device.thumbwheel?.divertedResolution ?? 120)
         let nativeResolution = Double(device.thumbwheel?.nativeResolution ?? 18)
 
+        // Pinch zoom streams with the wheel: one rotation zooms about e×.
+        if case let .single(.standard(action)) = binding, let direction = action.pinchDirection {
+            thumbAccumulator = 0
+            executor.magnify(by: direction * Double(abs(signed)) / resolution * config.scroll.thumbwheelSpeed)
+            return
+        }
         if case let .single(action) = binding, action.intercepts {
             // Discrete actions fire once per "notch" (~1/12 rotation).
             thumbAccumulator += signed

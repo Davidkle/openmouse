@@ -100,6 +100,8 @@ final class ActionExecutor {
         case .mute: mediaKey(7)
         case .brightnessUp: mediaKey(2)
         case .brightnessDown: mediaKey(3)
+        case .pinchZoomIn, .pinchZoomOut:
+            magnify(by: Self.pinchStep * (action.pinchDirection ?? 0))
         case .cycleDPI, .toggleSmartShift:
             deviceActionHandler?(.standard(action))
         default:
@@ -200,6 +202,50 @@ final class ActionExecutor {
         guard dx != 0 || dy != 0,
               let event = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2, wheel1: dy, wheel2: dx, wheel3: 0) else { return }
         event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        tag(event)
+        event.post(tap: .cghidEventTap)
+    }
+
+    // MARK: Pinch
+
+    /// Magnification one button press zooms by (0.1 = 10%).
+    private static let pinchStep = 0.1
+    /// A pinch ends once the input has been still this long.
+    private static let pinchIdle: TimeInterval = 0.15
+    private var pinchEnd: DispatchWorkItem?
+
+    /// Zoom the view under the pointer by posting the trackpad's magnify
+    /// gesture. Successive calls extend one pinch, which ends after
+    /// `pinchIdle` of quiet, so a spinning wheel reads as a single gesture.
+    func magnify(by amount: Double) {
+        guard amount != 0 else { return }
+        if pinchEnd == nil { postMagnify(0, phase: .began) }
+        postMagnify(amount, phase: .changed)
+        pinchEnd?.cancel()
+        let end = DispatchWorkItem { [weak self] in
+            self?.postMagnify(0, phase: .ended)
+            self?.pinchEnd = nil
+        }
+        pinchEnd = end
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pinchIdle, execute: end)
+    }
+
+    /// IOHIDEventPhaseBits.
+    private enum PinchPhase: Int64 {
+        case began = 1, changed = 2, ended = 4
+    }
+
+    /// CGEvent has no public magnify constructor; these are the undocumented
+    /// gesture fields a trackpad pinch carries (event type 29 = NSEventTypeGesture,
+    /// subtype 8 = kIOHIDEventTypeZoom).
+    private func postMagnify(_ amount: Double, phase: PinchPhase) {
+        guard let event = CGEvent(source: source), let gesture = CGEventType(rawValue: 29),
+              let subtype = CGEventField(rawValue: 110), let magnification = CGEventField(rawValue: 113),
+              let phaseField = CGEventField(rawValue: 132) else { return }
+        event.type = gesture
+        event.setIntegerValueField(subtype, value: 8)
+        event.setIntegerValueField(phaseField, value: phase.rawValue)
+        event.setDoubleValueField(magnification, value: amount)
         tag(event)
         event.post(tap: .cghidEventTap)
     }

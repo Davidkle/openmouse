@@ -45,7 +45,7 @@ public enum StandardAction: String, Codable, CaseIterable, Hashable, Sendable {
     // Browser & tabs
     case browserBack, browserForward, newTab, closeTab, reopenTab, nextTab, previousTab, reload
     // Zoom
-    case zoomIn, zoomOut, zoomReset
+    case zoomIn, zoomOut, zoomReset, pinchZoomIn, pinchZoomOut
     // macOS
     case missionControl, appExpose, showDesktop, launchpad, previousDesktop, nextDesktop
     case appSwitcher, spotlight, notificationCenter
@@ -76,6 +76,8 @@ public enum StandardAction: String, Codable, CaseIterable, Hashable, Sendable {
         case .zoomIn: return "Zoom In"
         case .zoomOut: return "Zoom Out"
         case .zoomReset: return "Actual Size"
+        case .pinchZoomIn: return "Pinch Zoom In"
+        case .pinchZoomOut: return "Pinch Zoom Out"
         case .missionControl: return "Mission Control"
         case .appExpose: return "App Exposé"
         case .showDesktop: return "Show Desktop"
@@ -124,6 +126,8 @@ public enum StandardAction: String, Codable, CaseIterable, Hashable, Sendable {
         case .zoomIn: return "plus.magnifyingglass"
         case .zoomOut: return "minus.magnifyingglass"
         case .zoomReset: return "1.magnifyingglass"
+        case .pinchZoomIn: return "arrow.up.left.and.arrow.down.right"
+        case .pinchZoomOut: return "arrow.down.right.and.arrow.up.left"
         case .missionControl: return "rectangle.3.group"
         case .appExpose: return "rectangle.stack"
         case .showDesktop: return "menubar.dock.rectangle"
@@ -182,11 +186,22 @@ public enum StandardAction: String, Codable, CaseIterable, Hashable, Sendable {
         }
     }
 
+    /// Pinch zoom posts the trackpad's magnify gesture at the pointer, so the
+    /// view under it zooms: a web app's canvas or timeline, a map, a PDF. Keyboard
+    /// zoom goes to the focused window. +1 zooms in, -1 out, nil for the rest.
+    public var pinchDirection: Double? {
+        switch self {
+        case .pinchZoomIn: return 1
+        case .pinchZoomOut: return -1
+        default: return nil
+        }
+    }
+
     public var category: ActionCategory {
         switch self {
         case .copy, .paste, .cut, .undo, .redo, .selectAll, .find, .save: return .editing
         case .browserBack, .browserForward, .newTab, .closeTab, .reopenTab, .nextTab, .previousTab, .reload,
-             .zoomIn, .zoomOut, .zoomReset: return .navigation
+             .zoomIn, .zoomOut, .zoomReset, .pinchZoomIn, .pinchZoomOut: return .navigation
         case .missionControl, .appExpose, .showDesktop, .launchpad, .previousDesktop, .nextDesktop,
              .appSwitcher, .spotlight, .notificationCenter: return .windows
         case .lockScreen, .screenshot, .captureRegion, .screenshotToolbar, .sleep: return .system
